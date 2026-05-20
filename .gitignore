@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+.dotnet-home/
+.artifacts/
+logs/
+*.log
+data/
+*.session
+appsettings.json

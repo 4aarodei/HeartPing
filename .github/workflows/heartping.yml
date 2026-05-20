@@ -1,0 +1,47 @@
+name: HeartPing
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 8-21 * * *"
+
+concurrency:
+  group: heartping
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore Telegram session
+        shell: bash
+        run: |
+          mkdir -p data
+          printf '%s' "$WT_SESSION_B64" | base64 -d > data/WTelegram.session
+        env:
+          WT_SESSION_B64: ${{ secrets.WT_SESSION_B64 }}
+
+      - name: Run HeartPing
+        run: dotnet run --configuration Release
+        env:
+          HEARTPING_TELEGRAM_API_ID: ${{ secrets.TG_API_ID }}
+          HEARTPING_TELEGRAM_API_HASH: ${{ secrets.TG_API_HASH }}
+          HEARTPING_TELEGRAM_PHONE_NUMBER: ${{ secrets.TG_PHONE }}
+          HEARTPING_TELEGRAM_SESSION_KEY: ${{ secrets.TG_SESSION_KEY }}
+          HEARTPING_TARGET_USERNAME: ${{ secrets.TARGET_USERNAME }}
+          HEARTPING_SEED_SALT: ${{ secrets.HEARTPING_SEED_SALT }}
+          HEARTPING_TELEGRAM_SESSION_PATH: data/WTelegram.session
+          HEARTPING_TIME_ZONE: Europe/Kyiv
+          HEARTPING_WINDOW_START: "11:00:00"
+          HEARTPING_WINDOW_END: "23:00:00"
+          HEARTPING_AVERAGE_MESSAGES_PER_DAY: "3"
+          HEARTPING_RUN_CADENCE_MINUTES: "15"
+          HEARTPING_MIN_MINUTES_BETWEEN_MESSAGES: "90"
