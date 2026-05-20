@@ -71,10 +71,12 @@ internal static class HeartPingTrayApp
 
             statusForm = new HeartPingStatusForm(
                 onOpenLogs: OpenLogsFolder,
+                onLogin: StartManualLogin,
                 onOpenAppFolder: OpenAppFolder,
                 onExit: ExitFromTray,
                 notifyIcon.Icon);
 
+            HeartPingInteractiveAuth.SetPromptHandler(statusForm.PromptForInput);
             notifyIcon.DoubleClick += (_, _) => ShowStatusWindow();
             SetStatus("HeartPing is running");
             _ = RunHeartPingAsync(args);
@@ -86,6 +88,7 @@ internal static class HeartPingTrayApp
             menu.Items.Add(statusItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Open HeartPing", null, (_, _) => ShowStatusWindow());
+            menu.Items.Add("Log in to Telegram", null, (_, _) => StartManualLogin());
             menu.Items.Add("Open logs", null, (_, _) => OpenLogsFolder());
             menu.Items.Add("Open app folder", null, (_, _) => OpenAppFolder());
             menu.Items.Add(new ToolStripSeparator());
@@ -116,6 +119,38 @@ internal static class HeartPingTrayApp
                 Console.Error.WriteLine(ex);
                 SetStatus("HeartPing crashed");
                 notifyIcon.ShowBalloonTip(5000, "HeartPing", "Stopped after an error. Check logs for details.", ToolTipIcon.Error);
+            }
+        }
+
+        private void StartManualLogin()
+        {
+            ShowStatusWindow();
+            _ = RunManualLoginAsync();
+        }
+
+        private async Task RunManualLoginAsync()
+        {
+            try
+            {
+                HeartPingRuntimeState.SetStatus("Manual Telegram login in progress");
+                HeartPingRuntimeState.SetNextAction("Complete Telegram login");
+                HeartPingRuntimeState.AddHistory("Manual Telegram login requested.");
+                var exitCode = await HeartPingApp.RunAsync(["--login-only"]);
+                if (exitCode == 0)
+                {
+                    SetStatus("HeartPing is running");
+                    HeartPingRuntimeState.SetNextAction("Ready to send");
+                }
+                else
+                {
+                    SetStatus($"Manual login failed with code {exitCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex);
+                SetStatus("Manual login failed");
+                HeartPingRuntimeState.AddHistory($"Manual login failed: {ex.Message}");
             }
         }
 
@@ -172,6 +207,7 @@ internal static class HeartPingTrayApp
         {
             if (disposing)
             {
+                HeartPingInteractiveAuth.SetPromptHandler(null);
                 HeartPingRuntimeState.Changed -= statusForm.RefreshRuntimeState;
                 shutdown.Cancel();
                 shutdown.Dispose();
@@ -191,10 +227,10 @@ internal static class HeartPingTrayApp
         private readonly Label logPathValueLabel;
         private readonly TextBox historyTextBox;
 
-        public HeartPingStatusForm(Action onOpenLogs, Action onOpenAppFolder, Action onExit, Icon icon)
+        public HeartPingStatusForm(Action onOpenLogs, Action onLogin, Action onOpenAppFolder, Action onExit, Icon icon)
         {
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(560, 430);
+            ClientSize = new Size(660, 430);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = true;
@@ -270,7 +306,7 @@ internal static class HeartPingTrayApp
                 Font = new Font("Segoe UI", 9),
                 Location = new Point(26, 230),
                 Padding = new Padding(8, 6, 8, 6),
-                Size = new Size(500, 34),
+                Size = new Size(600, 34),
                 Text = AppLog.CurrentLogPath ?? "Log file is not ready yet."
             };
 
@@ -291,13 +327,14 @@ internal static class HeartPingTrayApp
                 Multiline = true,
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Vertical,
-                Size = new Size(500, 82)
+                Size = new Size(600, 82)
             };
 
-            var openLogsButton = CreateButton("Open logs", new Point(26, 394), (_, _) => onOpenLogs());
-            var openFolderButton = CreateButton("Open app folder", new Point(146, 394), (_, _) => onOpenAppFolder());
-            var hideButton = CreateButton("Hide", new Point(346, 394), (_, _) => Hide());
-            var exitButton = CreateButton("Exit", new Point(436, 394), (_, _) => onExit());
+            var loginButton = CreateButton("Login now", new Point(26, 394), (_, _) => onLogin());
+            var openLogsButton = CreateButton("Open logs", new Point(126, 394), (_, _) => onOpenLogs());
+            var openFolderButton = CreateButton("Open app folder", new Point(246, 394), (_, _) => onOpenAppFolder());
+            var hideButton = CreateButton("Hide", new Point(446, 394), (_, _) => Hide());
+            var exitButton = CreateButton("Exit", new Point(536, 394), (_, _) => onExit());
 
             Controls.Add(headerLabel);
             Controls.Add(subtitleLabel);
@@ -309,6 +346,7 @@ internal static class HeartPingTrayApp
             Controls.Add(logPathValueLabel);
             Controls.Add(previewLabel);
             Controls.Add(historyTextBox);
+            Controls.Add(loginButton);
             Controls.Add(openLogsButton);
             Controls.Add(openFolderButton);
             Controls.Add(hideButton);
@@ -354,6 +392,32 @@ internal static class HeartPingTrayApp
             historyTextBox.Text = BuildHistoryText(snapshot.History);
         }
 
+        public string? PromptForInput(string prompt, bool secret)
+        {
+            if (InvokeRequired)
+            {
+                return (string?)Invoke(() => PromptForInput(prompt, secret));
+            }
+
+            Show();
+            if (WindowState == FormWindowState.Minimized)
+            {
+                WindowState = FormWindowState.Normal;
+            }
+
+            BringToFront();
+            Activate();
+
+            using var dialog = new TelegramPromptForm(prompt, secret)
+            {
+                StartPosition = FormStartPosition.CenterParent
+            };
+
+            return dialog.ShowDialog(this) == DialogResult.OK
+                ? dialog.Value
+                : null;
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -387,6 +451,65 @@ internal static class HeartPingTrayApp
                     .TakeLast(8)
                     .Select(entry => $"{entry.Timestamp:HH:mm:ss}  {entry.Text}"));
         }
+    }
+
+    private sealed class TelegramPromptForm : Form
+    {
+        private readonly TextBox valueTextBox;
+
+        public TelegramPromptForm(string prompt, bool secret)
+        {
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(420, 160);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            Text = prompt;
+            BackColor = Color.White;
+
+            var promptLabel = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 10),
+                Location = new Point(20, 20),
+                Text = $"{prompt}:"
+            };
+
+            valueTextBox = new TextBox
+            {
+                Font = new Font("Segoe UI", 10),
+                Location = new Point(20, 52),
+                Size = new Size(380, 28),
+                UseSystemPasswordChar = secret
+            };
+
+            var submitButton = new Button
+            {
+                DialogResult = DialogResult.OK,
+                Location = new Point(230, 108),
+                Size = new Size(80, 30),
+                Text = "OK"
+            };
+
+            var cancelButton = new Button
+            {
+                DialogResult = DialogResult.Cancel,
+                Location = new Point(320, 108),
+                Size = new Size(80, 30),
+                Text = "Cancel"
+            };
+
+            Controls.Add(promptLabel);
+            Controls.Add(valueTextBox);
+            Controls.Add(submitButton);
+            Controls.Add(cancelButton);
+
+            AcceptButton = submitButton;
+            CancelButton = cancelButton;
+        }
+
+        public string Value => valueTextBox.Text.Trim();
     }
 
     private static T Also<T>(this T value, Action<T> action)

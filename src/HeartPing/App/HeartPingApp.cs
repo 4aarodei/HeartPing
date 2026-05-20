@@ -6,6 +6,8 @@ namespace HeartPing;
 
 internal static class HeartPingApp
 {
+    private static readonly SemaphoreSlim TelegramOperationLock = new(1, 1);
+
     public static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken = default)
     {
         AppLog.Initialize();
@@ -84,25 +86,28 @@ internal static class HeartPingApp
             return 0;
         }
 
-        using var client = new Client(what => TelegramConfig(what, options.Telegram));
-        ConfigureTelegramLogging();
-
-        var me = await client.LoginUserIfNeeded();
-        Console.WriteLine($"Logged in as {me}.");
-
-        var telegram = new TelegramSender(client, options.Telegram);
-        var target = await telegram.ResolveTargetAsync();
-        var safety = await telegram.CheckSafetyAsync(target, options.Safety, DateTimeOffset.UtcNow);
-
-        if (!safety.CanSend)
+        return await WithTelegramOperationLockAsync(async () =>
         {
-            Console.WriteLine(safety.Reason);
-            return 0;
-        }
+            using var client = new Client(what => TelegramConfig(what, options.Telegram));
+            ConfigureTelegramLogging();
 
-        await client.SendMessageAsync(target, message);
-        Console.WriteLine("Manual message sent.");
-        return 0;
+            var me = await client.LoginUserIfNeeded();
+            Console.WriteLine($"Logged in as {me}.");
+
+            var telegram = new TelegramSender(client, options.Telegram);
+            var target = await telegram.ResolveTargetAsync();
+            var safety = await telegram.CheckSafetyAsync(target, options.Safety, DateTimeOffset.UtcNow);
+
+            if (!safety.CanSend)
+            {
+                Console.WriteLine(safety.Reason);
+                return 0;
+            }
+
+            await client.SendMessageAsync(target, message);
+            Console.WriteLine("Manual message sent.");
+            return 0;
+        });
     }
 
     private static async Task<int> RunWatchAsync(RunSettings settings, CancellationToken cancellationToken)
@@ -206,12 +211,18 @@ internal static class HeartPingApp
 
         if (settings.LoginOnly)
         {
-            using var loginClient = new Client(what => TelegramConfig(what, options.Telegram));
-            ConfigureTelegramLogging();
-            var loggedInUser = await loginClient.LoginUserIfNeeded();
-            Console.WriteLine($"Logged in as {loggedInUser}.");
-            Console.WriteLine($"Login completed. Session stored at {options.Telegram.SessionPath}.");
-            return RunResult.Success(sentMessage: false);
+            return await WithTelegramOperationLockAsync(async () =>
+            {
+                using var loginClient = new Client(what => TelegramConfig(what, options.Telegram));
+                ConfigureTelegramLogging();
+                var loggedInUser = await loginClient.LoginUserIfNeeded();
+                Console.WriteLine($"Logged in as {loggedInUser}.");
+                Console.WriteLine($"Login completed. Session stored at {options.Telegram.SessionPath}.");
+                HeartPingRuntimeState.SetStatus("Telegram login completed");
+                HeartPingRuntimeState.SetNextAction("Ready to send");
+                HeartPingRuntimeState.AddHistory("Telegram login completed.");
+                return RunResult.Success(sentMessage: false);
+            });
         }
 
         return await RunScheduledAttemptAsync(settings, nowUtc, options);
@@ -273,28 +284,32 @@ internal static class HeartPingApp
         }
 
         EnsureSessionDirectory(options.Telegram);
-        using var client = new Client(what => TelegramConfig(what, options.Telegram));
-        ConfigureTelegramLogging();
-
-        var me = await client.LoginUserIfNeeded();
-        Console.WriteLine($"Logged in as {me}.");
-
-        var telegram = new TelegramSender(client, options.Telegram);
-        var target = await telegram.ResolveTargetAsync();
-        var safety = await telegram.CheckSafetyAsync(target, options.Safety, nowUtc);
-
-        if (!safety.CanSend)
+        return await WithTelegramOperationLockAsync(async () =>
         {
-            Console.WriteLine(safety.Reason);
-            HeartPingRuntimeState.AddHistory($"Send skipped: {safety.Reason}");
-            return RunResult.Success(sentMessage: false);
-        }
+            using var client = new Client(what => TelegramConfig(what, options.Telegram));
+            ConfigureTelegramLogging();
 
-        await client.SendMessageAsync(target, message);
-        Console.WriteLine("Message sent.");
-        HeartPingRuntimeState.AddHistory($"\"{message}\" - delivered successfully.");
-        HeartPingRuntimeState.SetStatus("Message delivered");
-        return RunResult.Success(sentMessage: true);
+            var me = await client.LoginUserIfNeeded();
+            Console.WriteLine($"Logged in as {me}.");
+
+            var telegram = new TelegramSender(client, options.Telegram);
+            var target = await telegram.ResolveTargetAsync();
+            var safety = await telegram.CheckSafetyAsync(target, options.Safety, nowUtc);
+
+            if (!safety.CanSend)
+            {
+                Console.WriteLine(safety.Reason);
+                HeartPingRuntimeState.AddHistory($"Send skipped: {safety.Reason}");
+                return RunResult.Success(sentMessage: false);
+            }
+
+            await client.SendMessageAsync(target, message);
+            Console.WriteLine("Message sent.");
+            HeartPingRuntimeState.AddHistory($"\"{message}\" - delivered successfully.");
+            HeartPingRuntimeState.SetStatus("Message delivered");
+            HeartPingRuntimeState.SetNextAction("Waiting for next schedule");
+            return RunResult.Success(sentMessage: true);
+        });
     }
 
     private static void ConfigureTelegramLogging()
@@ -316,8 +331,8 @@ internal static class HeartPingApp
             "phone_number" => options.PhoneNumber,
             "session_pathname" => options.SessionPath,
             "session_key" => NormalizeSessionKey(options.SessionKey),
-            "verification_code" => ReadSecretFromConsole("Telegram code"),
-            "password" => ReadSecretFromConsole("Telegram 2FA password"),
+            "verification_code" => ReadInteractiveValue("Telegram code", secret: false),
+            "password" => ReadInteractiveValue("Telegram 2FA password", secret: true),
             "device_model" => "HeartPing",
             "app_version" => "0.1.0",
             _ => null
@@ -326,6 +341,19 @@ internal static class HeartPingApp
     private static void EnsureSessionDirectory(TelegramOptions options)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(options.SessionPath) ?? ".");
+    }
+
+    private static async Task<T> WithTelegramOperationLockAsync<T>(Func<Task<T>> action)
+    {
+        await TelegramOperationLock.WaitAsync();
+        try
+        {
+            return await action();
+        }
+        finally
+        {
+            TelegramOperationLock.Release();
+        }
     }
 
     private static string NormalizeSessionKey(string sessionKey)
@@ -357,10 +385,18 @@ internal static class HeartPingApp
         return true;
     }
 
-    private static string? ReadSecretFromConsole(string prompt)
+    private static string? ReadInteractiveValue(string prompt, bool secret)
     {
-        Console.Write($"{prompt}: ");
-        return Console.ReadLine();
+        HeartPingRuntimeState.SetStatus($"Waiting for {prompt.ToLowerInvariant()}");
+        HeartPingRuntimeState.SetNextAction("Complete Telegram login");
+        HeartPingRuntimeState.AddHistory($"{prompt} requested.");
+        var value = HeartPingInteractiveAuth.Prompt(prompt, secret);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException($"{prompt} was cancelled or left empty.");
+        }
+
+        return value;
     }
 
     private static string? GetArgumentValue(string[] args, string name)
