@@ -30,7 +30,7 @@ jobs:
           WT_SESSION_B64: ${{ secrets.WT_SESSION_B64 }}
 
       - name: Run HeartPing
-        run: dotnet run --configuration Release
+        run: dotnet run --project src/HeartPing/HeartPing.csproj --configuration Release
         env:
           HEARTPING_TELEGRAM_API_ID: ${{ secrets.TG_API_ID }}
           HEARTPING_TELEGRAM_API_HASH: ${{ secrets.TG_API_HASH }}
@@ -38,10 +38,11 @@ jobs:
           HEARTPING_TELEGRAM_SESSION_KEY: ${{ secrets.TG_SESSION_KEY }}
           HEARTPING_TARGET_USERNAME: ${{ secrets.TARGET_USERNAME }}
           HEARTPING_SEED_SALT: ${{ secrets.HEARTPING_SEED_SALT }}
-          HEARTPING_TELEGRAM_SESSION_PATH: data/WTelegram.session
+          HEARTPING_TELEGRAM_SESSION_PATH: ${{ github.workspace }}/data/WTelegram.session
           HEARTPING_TIME_ZONE: Europe/Kyiv
           HEARTPING_WINDOW_START: "11:00:00"
           HEARTPING_WINDOW_END: "23:00:00"
-          HEARTPING_AVERAGE_MESSAGES_PER_DAY: "3"
-          HEARTPING_RUN_CADENCE_MINUTES: "15"
+          HEARTPING_MESSAGES_PER_DAY: "3"
+          HEARTPING_ROLLING_MIN_MINUTES: "15"
+          HEARTPING_ROLLING_MAX_MINUTES: "15"
           HEARTPING_MIN_MINUTES_BETWEEN_MESSAGES: "90"

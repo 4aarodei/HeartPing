@@ -4,7 +4,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptsRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = Split-Path -Parent $scriptsRoot
 $runtimePath = Join-Path $root $RuntimeFolder
 $exePath = Join-Path $runtimePath "HeartPing.exe"
 

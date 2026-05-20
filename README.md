@@ -24,20 +24,20 @@ HeartPing fits best if you want a personal reminder or warmth-sender that lives 
 2. Copy the sample config:
 
 ```powershell
-Copy-Item appsettings.sample.json appsettings.json
+Copy-Item .\src\HeartPing\appsettings.sample.json .\src\HeartPing\appsettings.json
 ```
 
-3. Fill in your Telegram values in `appsettings.json`.
+3. Fill in your Telegram values in `src/HeartPing/appsettings.json`.
 4. Log in once:
 
 ```powershell
-dotnet run -- --login-only
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --login-only
 ```
 
 5. Start tray mode:
 
 ```powershell
-dotnet publish -c Release -o .artifacts/release
+dotnet publish .\src\HeartPing\HeartPing.csproj -c Release -o .artifacts/release
 .\.artifacts\release\HeartPing.exe
 ```
 
@@ -46,11 +46,12 @@ At the moment the repository is source-first. If GitHub Releases are added later
 ## Architecture
 
 - `Program.cs`: tiny entry point.
-- `HeartPingApp.cs`: coordinates one app run from config to delivery.
-- `Configuration/`: app options, validation, JSON loading, and environment overrides.
-- `Scheduling/`: deterministic message slot planning.
-- `Messaging/`: reads stable phrases from `messages.txt`.
-- `Telegram/`: resolves the target user, checks recent outgoing messages, and sends through WTelegramClient.
+- `src/HeartPing/App/`: app startup, tray UI, runtime state, and logging.
+- `src/HeartPing/Configuration/`: app options, validation, and environment overrides.
+- `src/HeartPing/Scheduling/`: deterministic message slot planning.
+- `src/HeartPing/Messaging/`: reads stable phrases from `messages.txt`.
+- `src/HeartPing/Telegram/`: resolves the target user, checks recent outgoing messages, and sends through WTelegramClient.
+- `scripts/`: Windows helper scripts for run, runtime prep, and startup shortcut installation.
 
 The message source is intentionally isolated, so a future `LlmMessageSource` can replace the file source without changing scheduling or Telegram delivery.
 
@@ -60,31 +61,31 @@ The message source is intentionally isolated, so a future `LlmMessageSource` can
 2. Create a local config from the sample and put your Telegram credentials, target, and schedule there.
 
 ```powershell
-Copy-Item appsettings.sample.json appsettings.json
+Copy-Item .\src\HeartPing\appsettings.sample.json .\src\HeartPing\appsettings.json
 ```
 3. Run the first login locally:
 
 ```powershell
-dotnet run -- --login-only
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --login-only
 ```
 
 4. Test the schedule without sending:
 
 ```powershell
-dotnet run -- --check
-dotnet run -- --dry-run
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --check
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --dry-run
 ```
 
 5. Start local watch mode for the day:
 
 ```powershell
-dotnet run -- --watch
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --watch
 ```
 
 For the normal always-on local run, use tray mode after the first login:
 
 ```powershell
-dotnet publish -c Release -o .artifacts/release
+dotnet publish .\src\HeartPing\HeartPing.csproj -c Release -o .artifacts/release
 .\.artifacts\release\HeartPing.exe
 .\.artifacts\release\HeartPing.exe --tray
 ```
@@ -100,7 +101,7 @@ Startup messages are disabled by default so the first send also follows the rand
 6. Run one check immediately:
 
 ```powershell
-dotnet run -- --check
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --check
 ```
 
 ## Safe Verification
@@ -109,11 +110,11 @@ Use these checks before any real send:
 
 ```powershell
 dotnet build HeartPing.slnx
-dotnet run -- --check
-dotnet run -- --dry-run
-dotnet run -- --login-only
-dotnet run -- --send-now --dry-run
-dotnet run -- --watch --dry-run
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --check
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --dry-run
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --login-only
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --send-now --dry-run
+dotnet run --project .\src\HeartPing\HeartPing.csproj -- --watch --dry-run
 ```
 
 `--check` validates local config, messages, and schedule without touching Telegram. `--dry-run` never sends; it only previews a due message when a slot is due. `--send-now --dry-run` lets you test console input without Telegram. `--login-only` creates or refreshes the local WTelegram session without sending a message.
@@ -125,7 +126,7 @@ dotnet run -- --watch --dry-run
 To test real Telegram delivery without waiting for the schedule:
 
 ```powershell
-dotnet publish -c Release -o .artifacts/release
+dotnet publish .\src\HeartPing\HeartPing.csproj -c Release -o .artifacts/release
 .\.artifacts\release\HeartPing.exe --send-now
 ```
 
@@ -136,7 +137,7 @@ The app will ask for one message in the console, resolve the configured target, 
 For everyday local hosting, prefer a Release build and run the executable directly instead of `dotnet run`. The publish output includes your local `appsettings.json` and `messages.txt`, and all relative paths resolve from the executable folder, so you can move the whole folder to another machine and only edit `appsettings.json`.
 
 ```powershell
-dotnet publish -c Release -o .artifacts/release
+dotnet publish .\src\HeartPing\HeartPing.csproj -c Release -o .artifacts/release
 .\.artifacts\release\HeartPing.exe --watch
 ```
 

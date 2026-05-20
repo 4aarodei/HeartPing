@@ -4,18 +4,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptsRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = Split-Path -Parent $scriptsRoot
+$projectPath = Join-Path $root "src\HeartPing\HeartPing.csproj"
 $outputPath = Join-Path $root $OutputFolder
 $publishPath = Join-Path $root ".artifacts\release"
 $sessionSources = @(
-    (Join-Path $root "bin\Debug\net8.0-windows\data\WTelegram.session"),
-    (Join-Path $root "bin\Debug\net8.0\data\WTelegram.session")
+    (Join-Path $root "data\WTelegram.session"),
+    (Join-Path $root "src\HeartPing\data\WTelegram.session"),
+    (Join-Path $root "src\HeartPing\bin\Debug\net8.0-windows\data\WTelegram.session"),
+    (Join-Path $root "src\HeartPing\bin\Debug\net8.0\data\WTelegram.session")
 )
 $sessionSource = $sessionSources | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 $sessionTargetDir = Join-Path $outputPath "data"
 $sessionTarget = Join-Path $sessionTargetDir "WTelegram.session"
 
-& dotnet publish (Join-Path $root "HeartPing.csproj") -c Release -o $publishPath
+& dotnet publish $projectPath -c Release -o $publishPath
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

@@ -12,7 +12,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptsRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = Split-Path -Parent $scriptsRoot
+$projectPath = Join-Path $root "src\HeartPing\HeartPing.csproj"
 $dotnetHome = Join-Path $root ".dotnet-home"
 $nugetHome = Join-Path $dotnetHome "AppData\Roaming\NuGet"
 
@@ -54,11 +56,11 @@ if ($Config) {
     $runArgs += $Config
 }
 
-$argsList = @("run", "--project", "HeartPing.csproj", "--")
+$argsList = @("run", "--project", $projectPath, "--")
 $argsList += $runArgs
 
 if ($PublishRelease) {
-    & dotnet publish "HeartPing.csproj" -c Release -o ".artifacts/release"
+    & dotnet publish $projectPath -c Release -o (Join-Path $root ".artifacts\release")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
