@@ -1,8 +1,47 @@
 # HeartPing
 
-HeartPing is a small .NET app that sends warm Telegram messages from your own Telegram account through MTProto, not from a bot. It can run either in the console for setup/manual actions or in the Windows system tray for everyday background watch mode.
+HeartPing is a small Windows-friendly .NET app that sends warm Telegram messages from your own Telegram account through MTProto, not from a bot. It can run either in the console for setup and manual actions or in the system tray for everyday background watch mode.
+
+It is built for a simple use case: keep a lightweight local app running, let it choose send times inside your schedule window, and use your own account to deliver gentle messages without a separate server.
 
 Use it gently. Telegram watches unofficial API clients for abuse, and automation should never flood chats or surprise people in harmful ways.
+
+## What It Does
+
+- Sends messages from your personal Telegram account, not a Telegram bot.
+- Runs locally on your machine and can stay hidden in the Windows tray.
+- Shows a minimal GUI with status, next planned action, and recent send history.
+- Supports both rolling random intervals and fixed daily slots.
+- Keeps logs locally and includes simple scripts for startup and runtime prep.
+
+## Who It Is For
+
+HeartPing fits best if you want a personal reminder or warmth-sender that lives on your own machine, stays out of the way, and does not require a hosted backend. It is more of a niche utility than a mass-market app, but that also means it stays small, direct, and easy to understand.
+
+## Quick Start
+
+1. Clone the repository.
+2. Copy the sample config:
+
+```powershell
+Copy-Item appsettings.sample.json appsettings.json
+```
+
+3. Fill in your Telegram values in `appsettings.json`.
+4. Log in once:
+
+```powershell
+dotnet run -- --login-only
+```
+
+5. Start tray mode:
+
+```powershell
+dotnet publish -c Release -o .artifacts/release
+.\.artifacts\release\HeartPing.exe
+```
+
+At the moment the repository is source-first. If GitHub Releases are added later, the README can point non-technical users directly to a ready-made download.
 
 ## Architecture
 
