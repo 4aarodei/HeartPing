@@ -44,6 +44,30 @@ internal static class HeartPingApp
         return await RunOnceAsync(settings, DateTimeOffset.UtcNow);
     }
 
+    public static async Task<int> RunCatchUpSendAsync(string[] args)
+    {
+        AppLog.Initialize();
+        var settings = RunSettings.FromArgs(args);
+        var options = AppOptionsLoader.Load(settings.ConfigPath);
+        options.Validate(loginOnly: false, dryRun: settings.DryRun);
+
+        HeartPingRuntimeState.SetStatus("Checking for a pending send");
+        HeartPingRuntimeState.SetNextAction("Trying immediate catch-up send");
+        HeartPingRuntimeState.AddHistory("Checking for a pending send after login.");
+
+        var result = await RunScheduledAttemptAsync(settings with { Watch = true }, DateTimeOffset.UtcNow, options);
+        if (result.SentMessage)
+        {
+            HeartPingRuntimeState.AddHistory("Pending scheduled message was sent after login.");
+        }
+        else
+        {
+            HeartPingRuntimeState.AddHistory("No pending scheduled message needed after login.");
+        }
+
+        return result.ExitCode;
+    }
+
     private static async Task<int> RunCheckAsync(RunSettings settings)
     {
         var options = AppOptionsLoader.Load(settings.ConfigPath);

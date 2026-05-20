@@ -138,8 +138,12 @@ internal static class HeartPingTrayApp
                 var exitCode = await HeartPingApp.RunAsync(["--login-only"]);
                 if (exitCode == 0)
                 {
-                    SetStatus("HeartPing is running");
-                    HeartPingRuntimeState.SetNextAction("Ready to send");
+                    var catchUpExitCode = await HeartPingApp.RunCatchUpSendAsync(Array.Empty<string>());
+                    SetStatus(catchUpExitCode == 0 ? "HeartPing is running" : $"Catch-up send failed with code {catchUpExitCode}");
+                    if (catchUpExitCode == 0)
+                    {
+                        HeartPingRuntimeState.SetNextAction("Ready to send");
+                    }
                 }
                 else
                 {
