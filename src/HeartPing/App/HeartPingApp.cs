@@ -67,7 +67,7 @@ internal static class HeartPingApp
         var options = AppOptionsLoader.Load(settings.ConfigPath);
         options.Validate(loginOnly: false, dryRun: settings.DryRun);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(options.Telegram.SessionPath) ?? ".");
+        EnsureSessionDirectory(options.Telegram);
 
         Console.Write("Message to send now: ");
         var message = Console.ReadLine()?.Trim();
@@ -202,7 +202,7 @@ internal static class HeartPingApp
     {
         options.Validate(settings.LoginOnly, settings.DryRun);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(options.Telegram.SessionPath) ?? ".");
+        EnsureSessionDirectory(options.Telegram);
 
         if (settings.LoginOnly)
         {
@@ -224,7 +224,7 @@ internal static class HeartPingApp
     {
         options.Validate(settings.LoginOnly, settings.DryRun);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(options.Telegram.SessionPath) ?? ".");
+        EnsureSessionDirectory(options.Telegram);
 
         var startupLocalTime = TimeZoneInfo.ConvertTime(nowUtc, TimeZoneInfo.FindSystemTimeZoneById(options.Schedule.TimeZoneId)).DateTime;
         Console.WriteLine("Watch start: sending one message immediately before switching to the normal schedule.");
@@ -272,6 +272,7 @@ internal static class HeartPingApp
             return RunResult.Success(sentMessage: false);
         }
 
+        EnsureSessionDirectory(options.Telegram);
         using var client = new Client(what => TelegramConfig(what, options.Telegram));
         ConfigureTelegramLogging();
 
@@ -321,6 +322,11 @@ internal static class HeartPingApp
             "app_version" => "0.1.0",
             _ => null
         };
+
+    private static void EnsureSessionDirectory(TelegramOptions options)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(options.SessionPath) ?? ".");
+    }
 
     private static string NormalizeSessionKey(string sessionKey)
     {
